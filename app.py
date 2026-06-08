@@ -148,27 +148,27 @@ def keygen():
 
 @app.route('/api/encrypt', methods=['POST'])
 def encrypt():
-    if not session_data.get("public_key"):
+    if session_data["public_key"] is None:
         return jsonify({"error": "Generate ML-KEM keys on Laptop first!"}), 400
-    
+
     user_message = request.json.get("message", "Empty Message")
-    
-    # ML_KEM_768.encaps() accepts raw public key bytes and returns raw bytes
-    shared_secret, kyber_ciphertext = ML_KEM_768.encaps(pk_bytes)
-    print("First return length:", len(kyber_ciphertext))
-    print("Second return length:", len(shared_secret))
+
+    pk = session_data["public_key"]
+
+    shared_secret, kyber_ciphertext = ML_KEM_768.encaps(pk)
+
     aes_key = shared_secret[:32]
-    
+
     nonce = b'\x00' * 8
     cipher = AES.new(aes_key, AES.MODE_CTR, nonce=nonce)
-    aes_ciphertext = cipher.encrypt(user_message.encode('utf-8'))
-    
+    aes_ciphertext = cipher.encrypt(user_message.encode("utf-8"))
+
     session_data["ciphertext"] = kyber_ciphertext
     session_data["aes_payload"] = aes_ciphertext
     session_data["shared_secret"] = shared_secret
-    
+
     return jsonify({
-        "status": "transmitted", 
+        "status": "transmitted",
         "kyber_ciphertext_hex": kyber_ciphertext.hex(),
         "shared_secret_hex": shared_secret.hex(),
         "aes_payload_hex": aes_ciphertext.hex()
@@ -176,39 +176,45 @@ def encrypt():
 
 @app.route('/api/decrypt', methods=['GET'])
 def decrypt():
-    if not session_data.get("secret_key"):
-        return jsonify({"status": "waiting", "message": "Click 'Execute ML-KEM Key Generation' on your laptop first!"})
-        
-    if not session_data.get("aes_payload") or not session_data.get("ciphertext"):
-        return jsonify({"status": "waiting", "message": "No encrypted payloads found. Submit a message from your phone first!"})
-    
+    if session_data["secret_key"] is None:
+        return jsonify({
+            "status": "waiting",
+            "message": "Click 'Execute ML-KEM Key Generation' first!"
+        })
+
+    if session_data["ciphertext"] is None:
+        return jsonify({
+            "status": "waiting",
+            "message": "No encrypted message received yet!"
+        })
+
     try:
         sk = session_data["secret_key"]
         kyber_ciphertext = session_data["ciphertext"]
-        sk_bytes = bytes.fromhex(session_data["secret_key_hex"])
-        ct_bytes = bytes.fromhex(session_data["ciphertext_hex"])
-        payload_bytes = bytes.fromhex(session_data["aes_payload_hex"])
 
-        print("Ciphertext length:", len(ct_bytes))
-        print("Secret key length:", len(sk_bytes))
-        # ML_KEM_768.decaps() takes raw bytes and returns raw bytes
         shared_secret = ML_KEM_768.decaps(sk, kyber_ciphertext)
+
         aes_key = shared_secret[:32]
-        
+
         nonce = b'\x00' * 8
         cipher = AES.new(aes_key, AES.MODE_CTR, nonce=nonce)
+
         original_msg = cipher.decrypt(session_data["aes_payload"])
-        
+
         return jsonify({
             "status": "decrypted",
             "kyber_ciphertext_hex": kyber_ciphertext.hex(),
             "shared_secret_hex": shared_secret.hex(),
             "aes_key_hex": aes_key.hex(),
             "aes_payload_hex": session_data["aes_payload"].hex(),
-            "message": original_msg.decode('utf-8')
+            "message": original_msg.decode("utf-8")
         })
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Decapsulation failed: {str(e)}"})
 
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Decapsulation failed: {str(e)}"
+        })
+        
 if __name__ == '__main__':
     app.run(debug=True, port=8000, use_reloader=False)
