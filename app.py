@@ -155,6 +155,8 @@ def encrypt():
     
     # ML_KEM_768.encaps() accepts raw public key bytes and returns raw bytes
     kyber_ciphertext, shared_secret = ML_KEM_768.encaps(session_data["public_key"])
+    print("First return length:", len(kyber_ciphertext))
+    print("Second return length:", len(shared_secret))
     aes_key = shared_secret[:32]
     
     nonce = b'\x00' * 8
@@ -183,7 +185,9 @@ def decrypt():
     try:
         sk = session_data["secret_key"]
         kyber_ciphertext = session_data["ciphertext"]
-        
+
+        print("Ciphertext length:", len(ct_bytes))
+        print("Secret key length:", len(sk_bytes))
         # ML_KEM_768.decaps() takes raw bytes and returns raw bytes
         shared_secret = ML_KEM_768.decaps(sk, kyber_ciphertext)
         aes_key = shared_secret[:32]
