@@ -185,6 +185,9 @@ def decrypt():
     try:
         sk = session_data["secret_key"]
         kyber_ciphertext = session_data["ciphertext"]
+        sk_bytes = bytes.fromhex(session_data["secret_key_hex"])
+        ct_bytes = bytes.fromhex(session_data["ciphertext_hex"])
+        payload_bytes = bytes.fromhex(session_data["aes_payload_hex"])
 
         print("Ciphertext length:", len(ct_bytes))
         print("Secret key length:", len(sk_bytes))
