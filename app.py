@@ -154,7 +154,7 @@ def encrypt():
     user_message = request.json.get("message", "Empty Message")
     
     # ML_KEM_768.encaps() accepts raw public key bytes and returns raw bytes
-    kyber_ciphertext, shared_secret = ML_KEM_768.encaps(session_data["public_key"])
+    shared_secret, kyber_ciphertext = ML_KEM_768.encaps(pk_bytes)
     print("First return length:", len(kyber_ciphertext))
     print("Second return length:", len(shared_secret))
     aes_key = shared_secret[:32]
