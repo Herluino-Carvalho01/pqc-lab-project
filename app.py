@@ -4,7 +4,7 @@ from Crypto.Cipher import AES
 
 app = Flask(__name__)
 
-# Clean global storage matrix
+# Storage matrix using standard byte objects
 session_data = {
     "public_key": None,
     "secret_key": None,
@@ -42,8 +42,8 @@ HTML_INTERFACE = """
             <h3>1. Receiver Dashboard (Laptop View)</h3>
             <button onclick="generateKeys()">Execute ML-KEM Key Generation</button>
             <div id="pk-container" style="display:none;">
-                <div class="box"><span class="label">Asymmetric Public Key (pk) sent to Cloud Server:</span><span id="pk-box"></span></div>
-                <div class="box" style="border-left-color: #f43f5e;"><span class="label">Asymmetric Secret Key (sk) kept securely in laptop memory:</span><span id="sk-box"></span></div>
+                <div class="box"><span class="label">Asymmetric Public Key (pk):</span><span id="pk-box"></span></div>
+                <div class="box" style="border-left-color: #f43f5e;"><span class="label">Asymmetric Secret Key (sk):</span><span id="sk-box"></span></div>
             </div>
             
             <button onclick="checkAndDecrypt()" style="background:#16a34a; display:none; margin-top:15px;" id="btn-refresh">Fetch & Decrypt Ciphertext Pipeline</button>
@@ -51,8 +51,8 @@ HTML_INTERFACE = """
             <div id="decryption-pipeline" style="display:none;">
                 <div class="box" style="border-left-color: #eab308;"><span class="label">Received Inbound Kyber Ciphertext (c):</span><span id="rx-c-box"></span></div>
                 <div class="box" style="border-left-color: #a855f7;"><span class="label">Decapsulated Post-Quantum Shared Secret Key (K):</span><span id="rx-ss-box"></span></div>
-                <div class="box" style="border-left-color: #a855f7;"><span class="label">Derived AES-256 Symmetric Key (First 32 bytes of K):</span><span id="rx-aes-box"></span></div>
-                <div class="box" style="border-left-color: #eab308;"><span class="label">Inbound Symmetric Encrypted Ciphertext Payload (Hex):</span><span id="rx-payload-box"></span></div>
+                <div class="box" style="border-left-color: #a855f7;"><span class="label">Derived AES-256 Symmetric Key:</span><span id="rx-aes-box"></span></div>
+                <div class="box" style="border-left-color: #eab308;"><span class="label">Inbound Encrypted Payload (Hex):</span><span id="rx-payload-box"></span></div>
                 <br>
                 <div id="result-box" class="box success-box"></div>
             </div>
@@ -64,33 +64,23 @@ HTML_INTERFACE = """
             <button onclick="sendEncrypted()" style="background:#ea580c;">Run PQC Encapsulation & Transmit</button>
             
             <div id="encryption-pipeline" style="display:none;">
-                <div class="box" style="border-left-color: #eab308;"><span class="label">Generated Kyber Ciphertext (c) to encapsulate key:</span><span id="tx-c-box"></span></div>
-                <div class="box" style="border-left-color: #a855f7;"><span class="label">Encapsulated Post-Quantum Shared Secret Key (K):</span><span id="tx-ss-box"></span></div>
-                <div class="box" style="border-left-color: #ea580c;"><span class="label">Symmetric AES-CTR Encrypted Message Payload (Hex):</span><span id="tx-payload-box"></span></div>
+                <div class="box" style="border-left-color: #eab308;"><span class="label">Generated Kyber Ciphertext (c):</span><span id="tx-c-box"></span></div>
+                <div class="box" style="border-left-color: #a855f7;"><span class="label">Encapsulated Shared Secret Key (K):</span><span id="tx-ss-box"></span></div>
+                <div class="box" style="border-left-color: #ea580c;"><span class="label">Symmetric AES-CTR Encrypted Payload:</span><span id="tx-payload-box"></span></div>
             </div>
         </div>
     </div>
 
     <script>
-        // Custom headers to completely skip localtunnel landing reminders
-        const bypassHeaders = {
-            'Content-Type': 'application/json',
-            'Bypass-Tunnel-Reminder': 'true'
-        };
-
         function generateKeys() {
-            fetch('/api/keygen', {
-                method: 'POST',
-                headers: {'Bypass-Tunnel-Reminder': 'true'}
-            })
+            fetch('/api/keygen', {method: 'POST'})
             .then(r => r.json())
             .then(data => {
                 document.getElementById('pk-container').style.display = 'block';
                 document.getElementById('pk-box').innerText = data.public_key_hex;
                 document.getElementById('sk-box').innerText = data.secret_key_hex;
                 document.getElementById('btn-refresh').style.display = 'block';
-            })
-            .catch(err => console.error("Keygen tracking blocked: ", err));
+            });
         }
 
         function sendEncrypted() {
@@ -99,7 +89,7 @@ HTML_INTERFACE = """
             
             fetch('/api/encrypt', {
                 method: 'POST',
-                headers: bypassHeaders, // Bypasses on phone send
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({message: msg})
             })
             .then(r => r.json())
@@ -112,20 +102,14 @@ HTML_INTERFACE = """
                     document.getElementById('tx-ss-box').innerText = data.shared_secret_hex;
                     document.getElementById('tx-payload-box').innerText = data.aes_payload_hex;
                 }
-            })
-            .catch(err => console.error("Encryption transmission error: ", err));
+            });
         }
 
         function checkAndDecrypt() {
-            fetch('/api/decrypt', {
-                method: 'GET',
-                headers: {'Bypass-Tunnel-Reminder': 'true'} // Bypasses on laptop read
-            })
+            fetch('/api/decrypt')
             .then(r => r.json())
             .then(data => {
-                if(data.status === "waiting") {
-                    alert(data.message);
-                } else if(data.status === "error") {
+                if(data.status === "waiting" || data.status === "error") {
                     alert(data.message);
                 } else {
                     document.getElementById('decryption-pipeline').style.display = 'block';
@@ -133,10 +117,9 @@ HTML_INTERFACE = """
                     document.getElementById('rx-ss-box').innerText = data.shared_secret_hex;
                     document.getElementById('rx-aes-box').innerText = data.aes_key_hex;
                     document.getElementById('rx-payload-box').innerText = data.aes_payload_hex;
-                    document.getElementById('result-box').innerHTML = "<strong>🎯 Cryptographic Success! Decrypted Text Plaintext:</strong><br><br>" + data.message;
+                    document.getElementById('result-box').innerHTML = "<strong>🎯 Cryptographic Success! Decrypted Plaintext:</strong><br><br>" + data.message;
                 }
-            })
-            .catch(err => console.error("Decryption pipeline error: ", err));
+            });
         }
     </script>
 </body>
@@ -149,13 +132,14 @@ def home():
 
 @app.route('/api/keygen', methods=['POST'])
 def keygen():
-    # Clear old sessions out completely on fresh generation
     session_data["ciphertext"] = None
     session_data["aes_payload"] = None
     
+    # ML_KEM_768.keygen() returns raw bytes in v1.2.0
     pk, sk = ML_KEM_768.keygen()
     session_data["public_key"] = pk
     session_data["secret_key"] = sk
+    
     return jsonify({
         "status": "keys generated", 
         "public_key_hex": pk.hex(),
@@ -165,10 +149,11 @@ def keygen():
 @app.route('/api/encrypt', methods=['POST'])
 def encrypt():
     if not session_data.get("public_key"):
-        return jsonify({"error": "Error: Generate ML-KEM keys on Laptop first so Phone has an encryption target!"}), 400
+        return jsonify({"error": "Generate ML-KEM keys on Laptop first!"}), 400
     
     user_message = request.json.get("message", "Empty Message")
     
+    # ML_KEM_768.encaps() accepts raw public key bytes and returns raw bytes
     kyber_ciphertext, shared_secret = ML_KEM_768.encaps(session_data["public_key"])
     aes_key = shared_secret[:32]
     
@@ -189,17 +174,17 @@ def encrypt():
 
 @app.route('/api/decrypt', methods=['GET'])
 def decrypt():
-    # Structural Safety Check: Stop 500 crashes before they happen
     if not session_data.get("secret_key"):
-        return jsonify({"status": "waiting", "message": "The pipeline is empty. Click 'Execute ML-KEM Key Generation' on your laptop first!"})
+        return jsonify({"status": "waiting", "message": "Click 'Execute ML-KEM Key Generation' on your laptop first!"})
         
     if not session_data.get("aes_payload") or not session_data.get("ciphertext"):
-        return jsonify({"status": "waiting", "message": "Keys exist, but no encrypted payloads found. Submit a message from your phone first!"})
+        return jsonify({"status": "waiting", "message": "No encrypted payloads found. Submit a message from your phone first!"})
     
     try:
         sk = session_data["secret_key"]
         kyber_ciphertext = session_data["ciphertext"]
         
+        # ML_KEM_768.decaps() takes raw bytes and returns raw bytes
         shared_secret = ML_KEM_768.decaps(sk, kyber_ciphertext)
         aes_key = shared_secret[:32]
         
@@ -219,5 +204,4 @@ def decrypt():
         return jsonify({"status": "error", "message": f"Decapsulation failed: {str(e)}"})
 
 if __name__ == '__main__':
-    # use_reloader=False stops Flask from flickering the port and breaking localtunnel
     app.run(debug=True, port=8000, use_reloader=False)
